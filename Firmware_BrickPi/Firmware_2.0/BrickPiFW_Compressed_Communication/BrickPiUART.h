@@ -27,9 +27,4 @@ int8_t UART_ReadArray(byte & ByteCount, byte * InArray, int timeout = 0);
 void   UART_Flush(void);
 bool   UART_Get_Addr(void);
 void   UART_Set_Addr(uint8_t NewAddr);
-
-static uint8_t  UART_MY_ADDR;
-static uint16_t UART_CKSM;
-static uint8_t  UART_FULL_ARRAY[128];
-
 #endif
