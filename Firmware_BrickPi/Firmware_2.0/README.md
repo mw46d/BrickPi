@@ -16,6 +16,9 @@ To easily find the compiled .hex file, be sure to go to Preferences and turn on 
 
 DEVELOPER NOTE:  When updating this, be sure to read the entire hex file off the memory of an Arduino.  This include the bootloader and this will allow you to program via serial.
 
+mw46d: I moved all the library sources into the main sketch directory. That way, you don't have to add them as global libraries
+       any longer. Just compiling the sketch works.
+
 =====
 
 This project combines the brains of a Raspberry Pi with the brawn of a LEGO MINDSTORMS NXT.  Read more about it here:  http://www.dexterindustries.com/BrickPi
