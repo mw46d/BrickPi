@@ -48,68 +48,56 @@
 #define CAL_ROWS 3
 #define CAL_LIMITS 2
 
-#define CS_SET_CLOCK_INPUT             \
-(DDRC &= (~(0x04 << CS_PORT)))
+#define CS_SET_CLOCK_INPUT(port)       \
+	(DDRC &= (~(0x04 << port)));
 
-#define CS_SET_CLOCK_OUTPUT            \
-(DDRC |= (0x04 << CS_PORT))
+#define CS_SET_CLOCK_OUTPUT(port)      \
+	(DDRC |= (0x04 << port));
 
-#define CS_SET_CLOCK_HIGH              \
-CS_SET_CLOCK_OUTPUT;                   \
-PORTC |= (0x04 << CS_PORT);
+#define CS_SET_CLOCK_HIGH(port)        \
+	CS_SET_CLOCK_OUTPUT(port);     \
+	PORTC |= (0x04 << port);
 
-#define CS_SET_CLOCK_LOW               \
-CS_SET_CLOCK_OUTPUT;                   \
-PORTC &= (~(0x04 << CS_PORT));
+#define CS_SET_CLOCK_LOW(port)         \
+	CS_SET_CLOCK_OUTPUT(port);     \
+	PORTC &= (~(0x04 << port));
 
-#define CS_SET_CLOCK(state)            \
-CS_SET_CLOCK_OUTPUT;                   \
-if(state){PORTC |= (0x04 << CS_PORT);} \
-else{PORTC &= (~(0x04 << CS_PORT));}
+#define CS_SET_CLOCK(port, state)      \
+	CS_SET_CLOCK_OUTPUT(port);     \
+	if (state) {                   \
+	  PORTC |= (0x04 << port);     \
+	}                              \
+	else {                         \
+	  PORTC &= (~(0x04 << port));  \
+	}
 
-#define CS_SET_DATA_INPUT              \
-(DDRC &= (~(0x01 << CS_PORT)))
+#define CS_SET_DATA_INPUT(port)        \
+	(DDRC &= (~(0x01 << port)));
 
-#define CS_SET_DATA_OUTPUT             \
-DDRC |= (0x01 << CS_PORT);
+#define CS_SET_DATA_OUTPUT(port)       \
+	DDRC |= (0x01 << port);
 
-#define CS_SET_DATA_HIGH               \
-CS_SET_DATA_OUTPUT;                    \
-PORTC |= (0x01 << CS_PORT);
+#define CS_SET_DATA_HIGH(port)         \
+	CS_SET_DATA_OUTPUT(port);      \
+	PORTC |= (0x01 << port);
 
-#define CS_SET_DATA_LOW                \
-CS_SET_DATA_OUTPUT;                    \
-PORTC &= (~(0x01 << CS_PORT));
+#define CS_SET_DATA_LOW(port)          \
+	CS_SET_DATA_OUTPUT(port);      \
+	PORTC &= (~(0x01 << port));
 
-#define CS_SET_DATA(state)             \
-CS_SET_DATA_OUTPUT;                    \
-if(state){PORTC |= (0x01 << CS_PORT);} \
-else{PORTC &= (~(0x01 << CS_PORT));}
-
-inline uint8_t CS_GET_DATA();
-inline uint16_t CS_READ_DATA();
+#define CS_SET_DATA(port, state)       \
+	CS_SET_DATA_OUTPUT(port);      \
+	if (state) {                   \
+	  PORTC |= (0x01 << port);     \
+	}                              \
+	else {                         \
+	  PORTC &= (~(0x01 << port));  \
+	}
 
 // Access from user program
 void     CS_Begin(uint8_t port, uint8_t modetype);
 uint16_t CS_Update(uint8_t port);
 void     CS_KeepAlive(uint8_t port);   // Simulate reading the sensor, so that it doesn't time-out.
 extern uint16_t CS_Values[2][4];
-
-// Only for use by this library
-void     CS_Reset();
-void     CS_SendMode(uint8_t mode);
-char     CS_ReadByte();
-uint16_t CS_CalcCRC(uint16_t crc, uint16_t val);
-bool     CS_ReadCalibration();
-int      CS_Calibrate();
-uint8_t  CS_CalToColor();
-
-static uint32_t calData[2][CAL_ROWS][CAL_COLUMNS];
-static int32_t  calLimits[2][CAL_LIMITS];
-static uint16_t raw_values[2][4];
-static uint16_t cal_values[2][4];
-static uint16_t type[2];
-
-static uint8_t CS_PORT;           // The port currently being used
 
 #endif
