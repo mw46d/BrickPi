@@ -121,6 +121,7 @@
   #define MSG_TYPE_VALUES           3 // Set the motor speed and direction, and return the sesnors and encoders.
   #define MSG_TYPE_E_STOP           4 // Float motors immediately.
   #define MSG_TYPE_TIMEOUT_SETTINGS 5 // Set the timeout.
+#define MSG_TYPE_MOTOR		'M'			// New Motor commands
 
 // RPi to BrickPi
   
@@ -190,23 +191,23 @@
 
 unsigned long COMM_TIMEOUT = 250; // How many ms since the last communication, before timing out (and floating the motors).
 
+MotorBank motorBank = MotorBank();
+
 // Run this once on setup.
 void setup(){
   UART_Setup(500000);	// Start UART
-  M_Setup();			// Motor Setup
   A_Setup();			// Analog Setup
 }
 
-int8_t Result;
-byte Bytes;
-byte Array[128];
+int8_t result;
+uint8_t bytes;
+uint8_t array[128];
 
 byte SensorType[2];        // Sensor type (raw ADC, touch, light off, light flash, light on, ultrasonic normal, ultrasonic ping, ultrasonic ping full)
 byte SensorSettings[2][8]; // For specifying the I2C details
 
 long ENC[2];         // For storing the encoder values
 long SEN[2];         // For storing sensor values
-long ENC_Offset[2];
 
 uint8_t I2C_Speed    [2];         // How fast to run the I2C bus.
 uint8_t I2C_Devices  [2];         // How many I2C devices are on each bus.
@@ -218,186 +219,126 @@ uint8_t I2C_In_Array [2][8][16];  // Data read from I2C sensor 1 and 2.
 
 byte debug_array[5] = {'d','e','b','u','g'};
 
-unsigned long LastUpdate;
+uint32_t lastUpdate;
 
-// This is a debug routine used by John Cole for developing the EV3 Touch sensor and testing EV3 sensor development.
-void debug_funtions(){
+void loop() {						// Main loop runs over and over again.  
+  result = UART_ReadArray(bytes, array, 1);		// Get an update from the Raspberry Pi.
   
-  /*  DEBUG WORK - DON"T COMPILE. */
-
-			/*UART_Write_Debug(5, debug_array);		// Marker for seeing where you are in logic analyzer data.
-			byte value [4] = {0,0,0,0};		
-			value[3] = (byte) (SEN[0] & (0xFF));
-			value[2] = (byte) ((SEN[0] >> 8) & 0xFF);
-			value[1] = (byte) ((SEN[0] >> 16) & 0xFF);
-			value[0] = (byte) ((SEN[0] >> 24) & 0xFF);
-			// Print sensor values back
-			UART_Write_Debug(4, value);
-			value[3] = (byte) (SEN[1] & (0xFF));
-			value[2] = (byte) ((SEN[1] >> 8) & 0xFF);
-			value[1] = (byte) ((SEN[1] >> 16) & 0xFF);
-			value[0] = (byte) ((SEN[1] >> 24) & 0xFF);
-			// Print sensor values back
-			UART_Write_Debug(4, value);			  
-			// Print the word debug.
-			UART_Write_Debug(5, debug_array);		// Marker for seeing where you are in logic analyzer data.
-			*/
-			  //SensorType[0] = TYPE_SENSOR_EV3_TOUCH_0;
-			  //SensorType[1] = TYPE_SENSOR_EV3_TOUCH_0;
-			  Array[BYTE_SENSOR_1_TYPE] = TYPE_SENSOR_EV3_TOUCH_0;	// Set the value of Port_1 (or Port 3?) 
-			  Array[BYTE_SENSOR_2_TYPE] = TYPE_SENSOR_EV3_TOUCH_0;	// Set the value of Port_2 (or Port 4?)
-			  
-			// Alternate back and forth between setup and reading values.  
-			  if(Array[BYTE_MSG_TYPE] == MSG_TYPE_SENSOR_TYPE){
-					Array[BYTE_MSG_TYPE] = MSG_TYPE_VALUES;
-			  } else {
-					Array[BYTE_MSG_TYPE] = MSG_TYPE_SENSOR_TYPE;
-			  }
-			  
-			  Result = 1;
-			// UART_Write_Debug(1, &Array[BYTE_MSG_TYPE]);
-			  
-  /*  DEBUG WORK - Delete when done. */
-
-}
-
-// Main loop runs over and over again.  
-
-void loop(){   
-  Result = UART_ReadArray(Bytes, Array, 1);		// Get an update from the Raspberry Pi.
-  
-/*  if(Result != (-2)){
-    Serial.write(Result);
-  }*/
-	/*  DEBUG WORK - Delete when done. */
-	// debug_funtions();		// John's Debug Functions.
-	/*  DEBUG WORK - Delete when done. */
-	
-  if(Result == 0){			//0  Destination address was BROADCAST
+  if (result == 0) {					//0  Destination address was BROADCAST
 							// This means that the Raspberry Pi sent a message to both Atmegas.
-    LastUpdate = millis();
+    lastUpdate = millis();
 	// Emergency Stop code
-	if(Array[BYTE_MSG_TYPE] == MSG_TYPE_E_STOP){	// Float motors immediately.
-      M_Float();									// Float motors immediately.
+    if (array[BYTE_MSG_TYPE] == MSG_TYPE_E_STOP) {	// Emergency Stop code
+      motorBank.stop(Motor_Both, Next_Action_Float);	// Float motors immediately.
     }
-	// Reset firmware address (address stored in EEPROM) with a touch sensor.
-    else if(Array[BYTE_MSG_TYPE] == MSG_TYPE_CHANGE_ADDR && Bytes == 2){
-      A_Config(PORT_1, 0);                            // Setup PORT_1 for touch sensor
-      if(A_ReadRaw(PORT_1) < 250){                    // Change address if touch sensor on port 1 is pressed.
-        if(Array[BYTE_NEW_ADDRESS] != 0 && Array[BYTE_NEW_ADDRESS] != 255){
-          UART_Set_Addr(Array[BYTE_NEW_ADDRESS]);     // Set new address
-          Array[0] = MSG_TYPE_CHANGE_ADDR;
-          UART_WriteArray(1, Array);
+							// Reset firmware address (address stored in EEPROM) with a touch sensor.
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_CHANGE_ADDR && bytes == 2) {
+      A_Config(PORT_1, 0);				// Setup PORT_1 for touch sensor
+      if (A_ReadRaw(PORT_1) < 250) {			// Change address if touch sensor on port 1 is pressed.
+        if (array[BYTE_NEW_ADDRESS] != 0 && array[BYTE_NEW_ADDRESS] != 255) {
+          UART_Set_Addr(array[BYTE_NEW_ADDRESS]);	// Set new address
+          array[0] = MSG_TYPE_CHANGE_ADDR;
+          UART_WriteArray(1, array);
         }
       }
-      SetupSensors();                                 // Change PORT_1 settings back
+      SetupSensors();					// Change PORT_1 settings back
+    }
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_MOTOR) {
+      motorBank.parseCommand(array + 1, bytes - 1);
     }
   }
-  else if(Result == 1){	 	//1  Destination address was mine
+  else if (result == 1) {				//1  Destination address was mine
 							// This means the Raspberry Pi is talking to this atmega specifically.
-    LastUpdate = millis();	// Update the timeout clock.
-    // Stop all motors.
-	if(Array[BYTE_MSG_TYPE] == MSG_TYPE_E_STOP){
-      M_Float();
-      Array[0] = MSG_TYPE_E_STOP;
-      UART_WriteArray(1, Array);      
+    lastUpdate = millis();				// Update the timeout clock.
+    if (array[BYTE_MSG_TYPE] == MSG_TYPE_E_STOP) {	// Stop all motors.
+      motorBank.stop(Motor_Both, Next_Action_Float);	// Float motors immediately.
+      array[0] = MSG_TYPE_E_STOP;
+      UART_WriteArray(1, array);      
     }
-	
-	// Reset the chips address.
-    else if(Array[BYTE_MSG_TYPE] == MSG_TYPE_CHANGE_ADDR && Bytes == 2){
-      A_Config(PORT_1, 0);                            // Setup PORT_1 for touch sensor
-      if(A_ReadRaw(PORT_1) < 250){                    // Change address if touch sensor on port 1 is pressed.    
-        if(Array[BYTE_NEW_ADDRESS] != 0 && Array[BYTE_NEW_ADDRESS] != 255){
-          UART_Set_Addr(Array[BYTE_NEW_ADDRESS]);     // Set new address
-          Array[0] = MSG_TYPE_CHANGE_ADDR;
-          UART_WriteArray(1, Array);
+							// Reset the chips address.
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_CHANGE_ADDR && bytes == 2) {
+      A_Config(PORT_1, 0);				// Setup PORT_1 for touch sensor
+      if (A_ReadRaw(PORT_1) < 250) {			// Change address if touch sensor on port 1 is pressed.    
+        if (array[BYTE_NEW_ADDRESS] != 0 && array[BYTE_NEW_ADDRESS] != 255) {
+          UART_Set_Addr(array[BYTE_NEW_ADDRESS]);	// Set new address
+          array[0] = MSG_TYPE_CHANGE_ADDR;
+          UART_WriteArray(1, array);
         }
       }
-      SetupSensors();                                 // Implement sensor settings.  
+      SetupSensors();					// Implement sensor settings.  
     }
-	
-	// Change/set the sensor type.
-	else if(Array[BYTE_MSG_TYPE] == MSG_TYPE_SENSOR_TYPE){
-		// UART_Write_Debug(5, debug_array);
+							// Change/set the sensor type.
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_SENSOR_TYPE) {
       ParseSensorSettings();
       SetupSensors();
-      Array[0] = MSG_TYPE_SENSOR_TYPE;	// Send back what we received: a command to ste the sensor type.
-      UART_WriteArray(1, Array);
+      array[0] = MSG_TYPE_SENSOR_TYPE;			// Send back what we received: a command to set the sensor type.
+      UART_WriteArray(1, array);
     }
 	
-	// Set the motor speed and direction, and return the sensors and encoders.
-    else if(Array[BYTE_MSG_TYPE] == MSG_TYPE_VALUES){
-      ParseHandleValues();							// Parse the values sent.
-      UpdateSensors();								// Update the sensors values.
-      M_Encoders(ENC[PORT_A], ENC[PORT_B]);      	// Get encoder values.
-      EncodeValues();								// 
-      Array[0] = MSG_TYPE_VALUES;
-      UART_WriteArray(Bytes, Array);
+							// Return the sensors and encoders.
+    else if(array[BYTE_MSG_TYPE] == MSG_TYPE_VALUES) {
+      ParseHandleValues();				// Parse the values sent.
+      UpdateSensors();					// Update the sensors values.
+      EncodeValues();
+      array[0] = MSG_TYPE_VALUES;
+      UART_WriteArray(bytes, array);
     }
-	
-	// Set the timeout
-    else if(Array[BYTE_MSG_TYPE] == MSG_TYPE_TIMEOUT_SETTINGS){
-      COMM_TIMEOUT = Array[BYTE_TIMEOUT] + (Array[(BYTE_TIMEOUT + 1)] * 256) + (Array[(BYTE_TIMEOUT + 2)] * 65536) + (Array[(BYTE_TIMEOUT + 3)] * 16777216);
-      Array[0] = MSG_TYPE_TIMEOUT_SETTINGS;
-      UART_WriteArray(1, Array);
+							// Set the timeout
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_TIMEOUT_SETTINGS) {
+      COMM_TIMEOUT = array[BYTE_TIMEOUT] + (array[(BYTE_TIMEOUT + 1)] * 256) + (array[(BYTE_TIMEOUT + 2)] * 65536) + (array[(BYTE_TIMEOUT + 3)] * 16777216);
+      array[0] = MSG_TYPE_TIMEOUT_SETTINGS;
+      UART_WriteArray(1, array);
     }
-  }
-  
-  // In case of a timeout, shut motors down.
-  if(COMM_TIMEOUT && (millis() > (LastUpdate + COMM_TIMEOUT))){   // If it timed out, float the motors
-    M_Float();	// Shutdown motors.
+    else if (array[BYTE_MSG_TYPE] == MSG_TYPE_MOTOR) {
+      motorBank.parseCommand(array + 1, bytes - 1);
+    }
   }
   
   // Keep the NXT Color Sensor Alive
-  byte i = 0;
-  while(i < 2){
-    if(SensorType[i] == TYPE_SENSOR_COLOR_FULL){
+  for (uint8_t i = 0; i < 2; i++) {
+    if (SensorType[i] == TYPE_SENSOR_COLOR_FULL) {
       CS_KeepAlive(i);                           // Simulate reading the color sensor, so that it doesn't timeout.
     }
-    i++;
   }
+
+  motorBank.updateStatus();
 }
 
 unsigned int Bit_Offset = 0;
 
-void AddBits(unsigned char byte_offset, unsigned char bit_offset, unsigned char bits, unsigned long value){
-  unsigned char i = 0;
-  while(i < bits){
-    if(value & 0x01){
-      Array[(byte_offset + ((bit_offset + Bit_Offset + i) / 8))] |= (0x01 << ((bit_offset + Bit_Offset + i) % 8));
+void AddBits(uint8_t byte_offset, uint8_t bit_offset, uint8_t bits, uint32_t value) {
+  for (uint8_t i = 0; i < bits; i++) {
+    if (value & 0x01) {
+      array[(byte_offset + ((bit_offset + Bit_Offset + i) / 8))] |= (0x01 << ((bit_offset + Bit_Offset + i) % 8));
     }
     value /= 2;
-    i++;
   }
   Bit_Offset += bits;
 }
 
-unsigned long GetBits(unsigned char byte_offset, unsigned char bit_offset, unsigned char bits){
-  unsigned long Result = 0;
-  char i = bits;
-  while(i){
+uint32_t GetBits(uint8_t byte_offset, uint8_t bit_offset, uint8_t bits) {
+  uint32_t Result = 0;
+  for (uint8_t i = bits; i > 0; i--) {
     Result *= 2;
-    Result |= ((Array[(byte_offset + ((bit_offset + Bit_Offset + (i - 1)) / 8))] >> ((bit_offset + Bit_Offset + (i - 1)) % 8)) & 0x01);    
-    i--;
+    Result |= ((array[(byte_offset + ((bit_offset + Bit_Offset + (i - 1)) / 8))] >> ((bit_offset + Bit_Offset + (i - 1)) % 8)) & 0x01);    
   }
   Bit_Offset += bits;
   return Result;
 }
 
-unsigned char BitsNeeded(unsigned long value){
-  unsigned char i = 0;
-  while(i < 32){
-    if(!value)
+uint8_t BitsNeeded(uint32_t value) {
+  for (uint8_t i = 0; i < 32; i++) {
+    if (!value) {
       return i;
+    }
     value /= 2;
-    i++;
   }
   return 31;
 }
 
 void ParseSensorSettings(){
-  SensorType[PORT_1] = Array[BYTE_SENSOR_1_TYPE];	// Set the value of Port_1 (or Port 3?) 
-  SensorType[PORT_2] = Array[BYTE_SENSOR_2_TYPE];	// Set the value of Port_2 (or Port 4?)
+  SensorType[PORT_1] = array[BYTE_SENSOR_1_TYPE];	// Set the value of Port_1 (or Port 3?) 
+  SensorType[PORT_2] = array[BYTE_SENSOR_2_TYPE];	// Set the value of Port_2 (or Port 4?)
   Bit_Offset = 0;
   // Setup custom I2C sensors.
   for(byte port = 0; port < 2; port++){
@@ -420,9 +361,9 @@ void ParseSensorSettings(){
   }
 }
 
-void EncodeValues(){
-  for(byte Byte = 0; Byte < 128; Byte++){
-    Array[Byte] = 0;
+void EncodeValues() {
+  for (byte b = 0; b < 128; b++) {
+    array[b] = 0;
   }
   
   long Temp_Values[2];
@@ -430,82 +371,84 @@ void EncodeValues(){
   unsigned char Temp_BitsNeeded[2] = {0, 0};
   Bit_Offset = 0;
   
-  for(byte port = 0; port < 2; port++){
-    Temp_Values[port] = ENC[port];  
-    if(Temp_Values[port] < 0){
+  // XXX: ENC will stay at {0, 0} now!
+  for (byte port = 0; port < 2; port++) {
+    Temp_Values[port] = ENC[port];
+    if (Temp_Values[port] < 0) {
       Temp_ENC_DIR[port] = 1;
       Temp_Values[port] *= (-1);
     }
     Temp_BitsNeeded[port] = BitsNeeded(Temp_Values[port]);
-    if(Temp_BitsNeeded[port])
+    if (Temp_BitsNeeded[port]) {
       Temp_BitsNeeded[port]++;
+    }
     AddBits(1, 0, 5, Temp_BitsNeeded[port]);
   }
-  
-  for(byte port = 0; port < 2; port++){
+
+  for (byte port = 0; port < 2; port++) {
     Temp_Values[port] *= 2;
     Temp_Values[port] |= Temp_ENC_DIR[port];     
     AddBits(1, 0, Temp_BitsNeeded[port], Temp_Values[port]);
   }
 
-  for(byte port = 0; port < 2; port++){
-    switch(SensorType[port]){
+  for (byte port = 0; port < 2; port++) {
+    switch (SensorType[port]) {
       case TYPE_SENSOR_TOUCH:
         AddBits(1, 0, 1, SEN[port]);
-      break;
+        break;
       case TYPE_SENSOR_ULTRASONIC_CONT:
       case TYPE_SENSOR_ULTRASONIC_SS:
         AddBits(1, 0, 8, SEN[port]);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_FULL:
         AddBits(1, 0, 3, SEN[port]);
         AddBits(1, 0, 10, CS_Values[port][BLANK_INDEX]);
         AddBits(1, 0, 10, CS_Values[port][RED_INDEX  ]);
         AddBits(1, 0, 10, CS_Values[port][GREEN_INDEX]);
         AddBits(1, 0, 10, CS_Values[port][BLUE_INDEX ]);
-      break;
+        break;
       case TYPE_SENSOR_I2C:
       case TYPE_SENSOR_I2C_9V:
         AddBits(1, 0, I2C_Devices[port], SEN[port]);
-        for(byte device = 0; device < I2C_Devices[port]; device++){
-          if((SEN[port] >> device) & 0x01){
-            for(byte in_byte = 0; in_byte < I2C_In_Bytes[port][device]; in_byte++){
+        for (byte device = 0; device < I2C_Devices[port]; device++) {
+          if ((SEN[port] >> device) & 0x01) {
+            for (byte in_byte = 0; in_byte < I2C_In_Bytes[port][device]; in_byte++) {
               AddBits(1, 0, 8, I2C_In_Array[port][device][in_byte]);
             }
           }
-        }        
-      break;
-      case TYPE_SENSOR_EV3_US_M0       :
-      case TYPE_SENSOR_EV3_US_M1       :
-      case TYPE_SENSOR_EV3_US_M2       :
-      case TYPE_SENSOR_EV3_US_M3       :
-      case TYPE_SENSOR_EV3_US_M4       :
-      case TYPE_SENSOR_EV3_US_M5       :
-      case TYPE_SENSOR_EV3_US_M6       :
-      case TYPE_SENSOR_EV3_COLOR_M0    :
-      case TYPE_SENSOR_EV3_COLOR_M1    :
-      case TYPE_SENSOR_EV3_COLOR_M2    :
-      case TYPE_SENSOR_EV3_COLOR_M4    :
-      case TYPE_SENSOR_EV3_COLOR_M5    :
-      case TYPE_SENSOR_EV3_GYRO_M0     :
-      case TYPE_SENSOR_EV3_GYRO_M1     :
-      case TYPE_SENSOR_EV3_GYRO_M2     :
-      case TYPE_SENSOR_EV3_GYRO_M4     :
-      case TYPE_SENSOR_EV3_INFRARED_M0 :
-      case TYPE_SENSOR_EV3_INFRARED_M1 :
-      case TYPE_SENSOR_EV3_INFRARED_M3 :
-      case TYPE_SENSOR_EV3_INFRARED_M4 :
-      case TYPE_SENSOR_EV3_INFRARED_M5 :
+        }
+        break;
+      case TYPE_SENSOR_EV3_US_M0:
+      case TYPE_SENSOR_EV3_US_M1:
+      case TYPE_SENSOR_EV3_US_M2:
+      case TYPE_SENSOR_EV3_US_M3:
+      case TYPE_SENSOR_EV3_US_M4:
+      case TYPE_SENSOR_EV3_US_M5:
+      case TYPE_SENSOR_EV3_US_M6:
+      case TYPE_SENSOR_EV3_COLOR_M0:
+      case TYPE_SENSOR_EV3_COLOR_M1:
+      case TYPE_SENSOR_EV3_COLOR_M2:
+      case TYPE_SENSOR_EV3_COLOR_M4:
+      case TYPE_SENSOR_EV3_COLOR_M5:
+      case TYPE_SENSOR_EV3_GYRO_M0:
+      case TYPE_SENSOR_EV3_GYRO_M1:
+      case TYPE_SENSOR_EV3_GYRO_M2:
+      case TYPE_SENSOR_EV3_GYRO_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M0:
+      case TYPE_SENSOR_EV3_INFRARED_M1:
+      case TYPE_SENSOR_EV3_INFRARED_M3:
+      case TYPE_SENSOR_EV3_INFRARED_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M5:
         AddBits(1, 0, 16, SEN[port]);
-      break; 
-	  case TYPE_SENSOR_EV3_TOUCH_0 	   :		// Send 16 bits or two bytes with the touch result.
-		AddBits(1, 0, 16, SEN[port]);	
-		break;
-      case TYPE_SENSOR_EV3_COLOR_M3    :
-      case TYPE_SENSOR_EV3_GYRO_M3     :
-      case TYPE_SENSOR_EV3_INFRARED_M2 :
+        break; 
+      case TYPE_SENSOR_EV3_TOUCH_0:			// Send 16 bits or two bytes with the touch result.
+        AddBits(1, 0, 16, SEN[port]);	
+        break;
+      case TYPE_SENSOR_EV3_COLOR_M3:
+      case TYPE_SENSOR_EV3_GYRO_M3:
+      case TYPE_SENSOR_EV3_INFRARED_M2:
         AddBits(1, 0, 32, SEN[port]);
-      break;
+        break;
       case TYPE_SENSOR_RCX_LIGHT:
       case TYPE_SENSOR_COLOR_RED:
       case TYPE_SENSOR_COLOR_GREEN:
@@ -516,41 +459,40 @@ void EncodeValues(){
     }
   }
   
-  Bytes = (1 + ((Bit_Offset + 7) / 8));      // How many bytes to send
+  bytes = (1 + ((Bit_Offset + 7) / 8));      // How many bytes to send
 }
 
-void ParseHandleValues(){
+void ParseHandleValues() {
   Bit_Offset = 0;
-  
-  for(byte port = 0; port < 2; port++){
-    if(GetBits(1, 0, 1)){
+  long ENC_Offset[2];
+
+  // XXX: Read but ignored now!  
+  for (byte port = 0; port < 2; port++) {
+    if (GetBits(1, 0, 1)) {
       ENC_Offset[port] = GetBits(1, 0, (GetBits(1, 0, 5) + 1));
-      if(ENC_Offset[port] & 0x01){
+      if (ENC_Offset[port] & 0x01) {
         ENC_Offset[port] *= (-1);
       }
       ENC_Offset[port] /= 2;
     }
-    else{
+    else {
       ENC_Offset[port] = 0;
     }
   }
   
-  if(ENC_Offset[PORT_A] || ENC_Offset[PORT_B]){
-    M_EncodersSubtract(ENC_Offset[PORT_A], ENC_Offset[PORT_B]);
+  // XXX: Read but ignored now!  
+  for(byte port = 0; port < 2; port++){
+    GetBits(1, 0, 10);
   }
   
-  for(byte port = 0; port < 2; port++){
-    M_PWM(port, GetBits(1, 0, 10));              // 8 bits of PWM, 1 bit dir, 1 bit enable
-  }
-  
-  for(byte port = 0; port < 2; port++){
-    if(SensorType[port] == TYPE_SENSOR_I2C
-    || SensorType[port] == TYPE_SENSOR_I2C_9V){  
-      for(byte device = 0; device < I2C_Devices[port]; device ++){
-        if(!(SensorSettings[port][device] & BIT_I2C_SAME)){           // not same
-          I2C_Out_Bytes[port][device]       = GetBits(1, 0, 4);
-          I2C_In_Bytes [port][device]       = GetBits(1, 0, 4);
-          for(byte ii = 0; ii < I2C_Out_Bytes[port][device]; ii++){
+  for (byte port = 0; port < 2; port++) {
+    if (SensorType[port] == TYPE_SENSOR_I2C ||
+        SensorType[port] == TYPE_SENSOR_I2C_9V) {  
+      for (byte device = 0; device < I2C_Devices[port]; device ++) {
+        if (!(SensorSettings[port][device] & BIT_I2C_SAME)) {           // not same
+          I2C_Out_Bytes[port][device] = GetBits(1, 0, 4);
+          I2C_In_Bytes [port][device] = GetBits(1, 0, 4);
+          for (byte ii = 0; ii < I2C_Out_Bytes[port][device]; ii++) {
             I2C_Out_Array[port][device][ii] = GetBits(1, 0, 8);
           }
         }
@@ -559,167 +501,173 @@ void ParseHandleValues(){
   }
 }
 
-void SetupSensors(){
-  EV3_Reset();			// Resets EV3 sensors and flushes the line.
-  //
-  // byte test_case = (byte)SensorType[0];		// For debug purposes only
-  // UART_Write_Debug(1, &test_case);
-  // Setup the sensors for a certain configuration.  Goes through each of the sensor ports,
-  // and configures them based on the array values "SensorType[port]"
-  for(byte port = 0; port < 2; port++){  
-    switch(SensorType[port]){
+void SetupSensors() {
+  EV3_Reset();						// Resets EV3 sensors and flushes the line.
+							// Setup the sensors for a certain configuration.
+							// Goes through each of the sensor ports, and
+							// configures them based on the array values
+							// "SensorType[port]"
+  for (uint8_t port = 0; port < 2; port++) {  
+    switch (SensorType[port]) {
       case TYPE_SENSOR_TOUCH:
         A_Config(port, 0);
-      break;
+        break;
       case TYPE_SENSOR_ULTRASONIC_CONT:
         US_Setup(port);
-      break;
+        break;
       case TYPE_SENSOR_ULTRASONIC_SS:
-                                                             // FIXME add support for SS mode
-      break;
+							// FIXME add support for SS mode
+        break;
       case TYPE_SENSOR_RCX_LIGHT:
         A_Config(port, MASK_9V);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_FULL:
         CS_Begin(port, TYPE_COLORFULL);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_RED:
         CS_Begin(port, TYPE_COLORRED);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_GREEN:
         CS_Begin(port, TYPE_COLORGREEN);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_BLUE:
         CS_Begin(port, TYPE_COLORBLUE);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_NONE:
         CS_Begin(port, TYPE_COLORNONE);
-      break;
+        break;
       case TYPE_SENSOR_I2C:
         A_Config(port, 0);
         I2C_Setup(port, I2C_Addr[port][0], I2C_Speed[port]);
-      break;
+        break;
       case TYPE_SENSOR_I2C_9V:
         A_Config(port, MASK_9V);
         I2C_Setup(port, I2C_Addr[port][0], I2C_Speed[port]);
-      break;
-      case TYPE_SENSOR_EV3_US_M0       :
-      case TYPE_SENSOR_EV3_US_M1       :
-      case TYPE_SENSOR_EV3_US_M2       :
-      case TYPE_SENSOR_EV3_US_M3       :
-      case TYPE_SENSOR_EV3_US_M4       :
-      case TYPE_SENSOR_EV3_US_M5       :
-      case TYPE_SENSOR_EV3_US_M6       :
-      case TYPE_SENSOR_EV3_COLOR_M0    :
-      case TYPE_SENSOR_EV3_COLOR_M1    :
-      case TYPE_SENSOR_EV3_COLOR_M2    :
-      case TYPE_SENSOR_EV3_COLOR_M3    :
-      case TYPE_SENSOR_EV3_COLOR_M4    :
-      case TYPE_SENSOR_EV3_COLOR_M5    :
-      case TYPE_SENSOR_EV3_GYRO_M0     :
-      case TYPE_SENSOR_EV3_GYRO_M1     :
-      case TYPE_SENSOR_EV3_GYRO_M2     :
-      case TYPE_SENSOR_EV3_GYRO_M3     :
-      case TYPE_SENSOR_EV3_GYRO_M4     :
-      case TYPE_SENSOR_EV3_INFRARED_M0 :
-      case TYPE_SENSOR_EV3_INFRARED_M1 :
-      case TYPE_SENSOR_EV3_INFRARED_M2 :
-      case TYPE_SENSOR_EV3_INFRARED_M3 :
-      case TYPE_SENSOR_EV3_INFRARED_M4 :
-      case TYPE_SENSOR_EV3_INFRARED_M5 :
-        EV3_Setup(port, SensorType[port]);	// For any EV3 this is called.
-		break;     
-      case TYPE_SENSOR_EV3_TOUCH_0 :
+        break;
+      case TYPE_SENSOR_EV3_US_M0:
+      case TYPE_SENSOR_EV3_US_M1:
+      case TYPE_SENSOR_EV3_US_M2:
+      case TYPE_SENSOR_EV3_US_M3:
+      case TYPE_SENSOR_EV3_US_M4:
+      case TYPE_SENSOR_EV3_US_M5:
+      case TYPE_SENSOR_EV3_US_M6:
+      case TYPE_SENSOR_EV3_COLOR_M0:
+      case TYPE_SENSOR_EV3_COLOR_M1:
+      case TYPE_SENSOR_EV3_COLOR_M2:
+      case TYPE_SENSOR_EV3_COLOR_M3:
+      case TYPE_SENSOR_EV3_COLOR_M4:
+      case TYPE_SENSOR_EV3_COLOR_M5:
+      case TYPE_SENSOR_EV3_GYRO_M0:
+      case TYPE_SENSOR_EV3_GYRO_M1:
+      case TYPE_SENSOR_EV3_GYRO_M2:
+      case TYPE_SENSOR_EV3_GYRO_M3:
+      case TYPE_SENSOR_EV3_GYRO_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M0:
+      case TYPE_SENSOR_EV3_INFRARED_M1:
+      case TYPE_SENSOR_EV3_INFRARED_M2:
+      case TYPE_SENSOR_EV3_INFRARED_M3:
+      case TYPE_SENSOR_EV3_INFRARED_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M5:
+        EV3_Setup(port, SensorType[port]);		// For any EV3 this is called.
+        break;
+      case TYPE_SENSOR_EV3_TOUCH_0:
         EV3_Setup_Touch(port);				// We setup the touch sensor different since it's an analog sensor.	
-		break;
-	  case TYPE_SENSOR_EV3_TOUCH_DEBOUNCE:
-		EV3_Setup_Touch(port);				// We're really doing whatever we're doing above for the touch.
-		break;
-	  case TYPE_SENSOR_TOUCH_DEBOUNCE:		// NXT Sensor debounced.
-		A_Config(port, 0);					// Same sort of setup as the TYPE_SENSOR_TOUCH.
-		EV3_Setup_Touch(port);				// We're really doing whatever we're doing above for the touch.
-
-		break;
-      default:								// Default is analog value.
-        A_Config(port, SensorType[port]);	// Almost everyone that's not defined above is setup this line.
+        break;
+      case TYPE_SENSOR_EV3_TOUCH_DEBOUNCE:
+        EV3_Setup_Touch(port);				// We're really doing whatever we're doing above for the touch.
+        break;
+      case TYPE_SENSOR_TOUCH_DEBOUNCE:			// NXT Sensor debounced.
+        A_Config(port, 0);				// Same sort of setup as the TYPE_SENSOR_TOUCH.
+        EV3_Setup_Touch(port);				// We're really doing whatever we're doing above for the touch.
+        break;
+      default:						// Default is analog value.
+        A_Config(port, SensorType[port]);		// Almost everyone that's not defined above is setup this line.
     }
   }  
 }
 
-void UpdateSensors(){
-	byte test_case = 0;		// For debug purposes only
-  // UART_Write_Debug(1, &test_case);
-
-  for(byte port = 0; port < 2; port++){
-    switch(SensorType[port]){
+void UpdateSensors() {
+  for (byte port = 0; port < 2; port++) {
+    switch (SensorType[port]) {
       case TYPE_SENSOR_TOUCH:
-        if(A_ReadRaw(port) < 400) SEN[port] = 1;
-        else                      SEN[port] = 0;
-      break;
+        if (A_ReadRaw(port) < 400) {
+          SEN[port] = 1;
+        }
+        else {
+          SEN[port] = 0;
+        }
+        break;
       case TYPE_SENSOR_ULTRASONIC_CONT:
         SEN[port] = US_ReadByte(port);
-      break;
+        break;
       case TYPE_SENSOR_ULTRASONIC_SS:
-        SEN[port] = 37;                 // FIXME add support for SS mode
-      break;
+        SEN[port] = 37;					// XXX: add support for SS mode
+        break;
       case TYPE_SENSOR_RCX_LIGHT:
         A_Config(port, 0);
         delayMicroseconds(20);
         SEN[port] = A_ReadRaw(port);
         A_Config(port, MASK_9V);
-      break;
+        break;
       case TYPE_SENSOR_COLOR_FULL:
       case TYPE_SENSOR_COLOR_RED:
       case TYPE_SENSOR_COLOR_GREEN:
       case TYPE_SENSOR_COLOR_BLUE:
       case TYPE_SENSOR_COLOR_NONE:
-        SEN[port] = CS_Update(port);      // If the mode is FULL, the 4 raw values will be stored in CS_Values
-		break;
+        SEN[port] = CS_Update(port);			// If the mode is FULL, the 4 raw values will be stored in CS_Values
+        break;
       case TYPE_SENSOR_I2C:
       case TYPE_SENSOR_I2C_9V:
         SEN[port] = 0;
-        for(byte device = 0; device < I2C_Devices[port]; device++){
-          SEN[port] |= ((I2C_Transfer(port, I2C_Addr[port][device], I2C_Speed[port], (SensorSettings[port][device] & BIT_I2C_MID), I2C_Out_Bytes[port][device], I2C_Out_Array[port][device], I2C_In_Bytes[port][device], I2C_In_Array[port][device]) & 0x01) << device); // The success/failure result of the I2C transaction(s) is stored as 1 bit in SEN.
+        for (byte device = 0; device < I2C_Devices[port]; device++) {
+          SEN[port] |= ((I2C_Transfer(port,		// The success/failure result of the I2C transaction(s) is stored as 1 bit in SEN.
+                                      I2C_Addr[port][device],
+                                      I2C_Speed[port],
+                                      (SensorSettings[port][device] & BIT_I2C_MID),
+                                      I2C_Out_Bytes[port][device],
+                                      I2C_Out_Array[port][device],
+                                      I2C_In_Bytes[port][device],
+                                      I2C_In_Array[port][device]) & 0x01) << device);
         }
         break;
-      case TYPE_SENSOR_EV3_US_M0       :
-      case TYPE_SENSOR_EV3_US_M1       :
-      case TYPE_SENSOR_EV3_US_M2       :
-      case TYPE_SENSOR_EV3_US_M3       :
-      case TYPE_SENSOR_EV3_US_M4       :
-      case TYPE_SENSOR_EV3_US_M5       :
-      case TYPE_SENSOR_EV3_US_M6       :
-      case TYPE_SENSOR_EV3_COLOR_M0    :
-      case TYPE_SENSOR_EV3_COLOR_M1    :
-      case TYPE_SENSOR_EV3_COLOR_M2    :
-      case TYPE_SENSOR_EV3_COLOR_M3    :
-      case TYPE_SENSOR_EV3_COLOR_M4    :
-      case TYPE_SENSOR_EV3_COLOR_M5    :
-      case TYPE_SENSOR_EV3_GYRO_M0     :
-      case TYPE_SENSOR_EV3_GYRO_M1     :
-      case TYPE_SENSOR_EV3_GYRO_M2     :
-      case TYPE_SENSOR_EV3_GYRO_M3     :
-      case TYPE_SENSOR_EV3_GYRO_M4     :
-      case TYPE_SENSOR_EV3_INFRARED_M0 :
-      case TYPE_SENSOR_EV3_INFRARED_M1 :
-      case TYPE_SENSOR_EV3_INFRARED_M2 :
-      case TYPE_SENSOR_EV3_INFRARED_M3 :
-      case TYPE_SENSOR_EV3_INFRARED_M4 :
-      case TYPE_SENSOR_EV3_INFRARED_M5 :
-        SEN[port] = EV3_Update(port);		
+      case TYPE_SENSOR_EV3_US_M0:
+      case TYPE_SENSOR_EV3_US_M1:
+      case TYPE_SENSOR_EV3_US_M2:
+      case TYPE_SENSOR_EV3_US_M3:
+      case TYPE_SENSOR_EV3_US_M4:
+      case TYPE_SENSOR_EV3_US_M5:
+      case TYPE_SENSOR_EV3_US_M6:
+      case TYPE_SENSOR_EV3_COLOR_M0:
+      case TYPE_SENSOR_EV3_COLOR_M1:
+      case TYPE_SENSOR_EV3_COLOR_M2:
+      case TYPE_SENSOR_EV3_COLOR_M3:
+      case TYPE_SENSOR_EV3_COLOR_M4:
+      case TYPE_SENSOR_EV3_COLOR_M5:
+      case TYPE_SENSOR_EV3_GYRO_M0:
+      case TYPE_SENSOR_EV3_GYRO_M1:
+      case TYPE_SENSOR_EV3_GYRO_M2:
+      case TYPE_SENSOR_EV3_GYRO_M3:
+      case TYPE_SENSOR_EV3_GYRO_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M0:
+      case TYPE_SENSOR_EV3_INFRARED_M1:
+      case TYPE_SENSOR_EV3_INFRARED_M2:
+      case TYPE_SENSOR_EV3_INFRARED_M3:
+      case TYPE_SENSOR_EV3_INFRARED_M4:
+      case TYPE_SENSOR_EV3_INFRARED_M5:
+        SEN[port] = EV3_Update(port);
         break;
-      case TYPE_SENSOR_EV3_TOUCH_0 :
+      case TYPE_SENSOR_EV3_TOUCH_0:
         SEN[port] = EV3_Update_Touch(port);	
         break;
-	  case TYPE_SENSOR_EV3_TOUCH_DEBOUNCE:
-		SEN[port] = EV3_Update_Touch_Debounce(port);		// Returns a 1 or 0
-		break;
-	  case TYPE_SENSOR_TOUCH_DEBOUNCE:
-		SEN[port] = A_ReadRaw_Debounce_Ch(port);			//
-		break;
-	  case RETURN_VERSION:
-		SEN[port] = VERSION;			//
-		break;
+      case TYPE_SENSOR_EV3_TOUCH_DEBOUNCE:
+        SEN[port] = EV3_Update_Touch_Debounce(port);	// Returns a 1 or 0
+        break;
+      case TYPE_SENSOR_TOUCH_DEBOUNCE:
+        SEN[port] = A_ReadRaw_Debounce_Ch(port);
+        break;
+      case RETURN_VERSION:
+        SEN[port] = VERSION;
+        break;
       default:
         SEN[port] = A_ReadRaw(port);		
     }
