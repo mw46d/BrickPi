@@ -42,6 +42,4 @@ uint8_t US_ReadByte(uint8_t port);
 uint8_t US_ReadArray(uint8_t port, uint8_t * array);
 uint8_t US_Command(uint8_t port, uint8_t command);
 
-static uint8_t US_Array[8];
-
 #endif
