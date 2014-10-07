@@ -14,6 +14,27 @@
 
 #include "BrickPiI2C.h"
 
+static uint8_t I2C_DELAY;         // How long to wait between signal changes
+
+static uint8_t I2C_PORT;          // Which port to use
+
+static uint8_t I2C_PORT_DDRC_SCL;
+static uint8_t I2C_PORT_DDRC_SCL_NOT;
+static uint8_t I2C_PORT_PIN_NUM_SCL;
+static uint8_t I2C_PORT_PIN_MSK_SCL;
+
+static uint8_t I2C_PORT_DDRC_SDA;
+static uint8_t I2C_PORT_DDRC_SDA_NOT;
+static uint8_t I2C_PORT_PIN_NUM_SDA;
+static uint8_t I2C_PORT_PIN_MSK_SDA;
+
+static uint8_t I2C_ADDR;          // The address of the slave
+static uint8_t I2C_Buffer[16];    // Bytes to be sent, loaded with I2C_Write, and used by the ISR.
+static uint8_t I2C_transferring;  // Flag for activity, set to the number of bytes in the Buffer for writing, or the number of bytes to send and receive for reading.
+static uint8_t I2C_receiving;     // Flag for reading, set to the number of bytes to read.
+
+static uint8_t I2C_TEMP_BIT_0, I2C_TEMP_BIT_1, I2C_TEMP_BIT_2, I2C_TEMP_BIT_3, I2C_TEMP_BIT_4, I2C_TEMP_BIT_5, I2C_TEMP_BIT_6, I2C_TEMP_BIT_7;
+
 // Delay for ((us * 1) + (17 / 16)) microseconds, so us + 1 1/16th uS.
 void I2C_Delay_us(uint16_t us){                                                                              // 17 total overhead for calling and returning
   us--;
@@ -174,10 +195,6 @@ uint8_t I2C_SDA_CHECK(){
     __asm__("nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t""nop\n\t");
   }
   return 1;
-}
-
-void I2C_SCL_LOW_EX(){
-  I2C_SCL_LOW;
 }
 
 // Send the bus Start condition
