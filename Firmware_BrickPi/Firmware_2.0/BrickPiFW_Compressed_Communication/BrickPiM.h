@@ -192,9 +192,6 @@ public:
   */
   bool resetEncoder(Motor which_motor);
 
-  void motorFloat(Motor which_motor);
-  void motorBrake(Motor which_motor);
-
   /**
   Set the speed, duration to run, and control for the motor
       "sZ<uint8_t><int8_t><LSB uint32_t><uint8_t>"
@@ -356,5 +353,8 @@ private:
   int32_t lastEncoder[2];
   
   bool motorEnable(Motor which_motor);
+  void motorFloat(Motor which_motor);
+  void motorBrake(Motor which_motor);
+
 };
 #endif

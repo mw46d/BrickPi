@@ -109,13 +109,13 @@ bool MotorBank::setSpeed(Motor which_motor, int8_t speed) {
     return false;
   }
 
+  motorSpeed[which_motor - 1] = speed;
 
   if (speed < 0) {
     reverse = true;
     speed = -speed;
   }
 
-  motorSpeed[which_motor - 1] = speed;
   motorStatus[which_motor - 1] |= MOTOR_STATUS_SPEED;
 
   speed = (uint8_t)(((uint16_t)speed * 255) / 100);
@@ -155,12 +155,14 @@ int8_t MotorBank::getSpeed(Motor which_motor) {
 }
 
 bool MotorBank::setTimeToRun(Motor which_motor, uint32_t mseconds) {
+  if (mseconds == 0) {
+    return true;
+  }
+
   if ((which_motor & Motor_Both) == Motor_Both) {
     finishTime[0] = finishTime[1] = mseconds + millis();
     motorStatus[0] |= MOTOR_STATUS_TIME;
-    motorStatus[0] &= ~MOTOR_STATUS_TACHO;
     motorStatus[1] |= MOTOR_STATUS_TIME;
-    motorStatus[1] &= ~MOTOR_STATUS_TACHO;
   }
   else {
     if (which_motor >= Motor_Both) {
@@ -169,7 +171,6 @@ bool MotorBank::setTimeToRun(Motor which_motor, uint32_t mseconds) {
 
     finishTime[which_motor - 1] = mseconds + millis();
     motorStatus[which_motor - 1] |= MOTOR_STATUS_TIME;
-    motorStatus[which_motor - 1] &= ~MOTOR_STATUS_TACHO;
   }
 
   return true;
