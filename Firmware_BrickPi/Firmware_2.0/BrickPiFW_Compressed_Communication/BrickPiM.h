@@ -105,87 +105,87 @@ typedef enum {
 class MotorBank {
 public:
   MotorBank();
-  
+
   /** Set the target encoder position for the motor
       "sE<uint8_t><LSB int32_t>"
     @param which_motor    Provide which motor to operate on
     @param target         Encode value to achieve
   */
   bool setEncoderTarget(Motor which_motor, int32_t target);
-  
-  /** 
+
+  /**
   Get the target encoder position for the motor
       "gE<uint8_t>"
     @param which_motor    Provide which motor to operate on
     @return long encoder value that the motor is trying to achieve.
   */
   int32_t getEncoderTarget(Motor which_motor);
-  
-  /** 
+
+  /**
   Set the speed of the motor
       "sS<uint8_t><int8_t>"
     @param which_motor    Provide which motor to operate on
     @param speed          The speed value between -100 and 100
   */
   bool setSpeed(Motor which_motor, int8_t speed);
-  
-  /** 
+
+  /**
   Get the speed of the motor
       "gS<uint8_t>"
     @param which_motor    Provide which motor to operate on
     @return  the speed value set to the motor
   */
   int8_t getSpeed(Motor which_motor);
-  
-  /** 
+
+  /**
   Set the time in milli seconds for which the motor should run for
       "sT<uint8_t><LSB uint32_t>"
     @param which_motor    Provide which motor to operate on
     @param mseconds   The time duration the motor should run
   */
   bool setTimeToRun(Motor which_motor, uint32_t mseconds);
-  
-  /** 
+
+  /**
   Get the time in milli seconds that the motor is running for
       "gT<uint8_t>"
     @param which_motor    Provide which motor to operate on
     @return  time the motor has been running since last start.
   */
   uint32_t getTimeToRun(Motor which_motor);
-  
-  /** 
+
+  /**
   Get the current encoder position of the motor in degrees
       "gP<uint8_t>"
     @param which_motor    Provide which motor to operate on
     @return              current encoder value
   */
   int32_t getEncoderPosition(Motor which_motor);
-  
-  /** 
+
+  /**
   Get the current status of the motor
       "gB<uint8_t>"
     @param which_motor    Provide which motor to operate on
     @return  The current status of the motor.
     This is a byte with various bits set based on motor's state.
     Refer to User Guide for details of bits.
-  */  
+  */
   uint8_t  getStatusByte(Motor which_motor);
-  
-  /** 
+
+  /**
   Reset all the set values for the motors
   Applies to all motors on this bank.
       "r"
   */
   bool reset();
-  
-  /** 
+
+  /**
   Start both motors at the same time to follow the set conditions
   This will execute the commands specified in the command register on both motors at once.
       "sI"
   */
   bool startBothInSync();
-  
-  /** 
+
+  /**
   Reset the current encoder position to zero for the motor
       "rE<uint8_t>"
     @param which_motor    Provide which motor to operate on
@@ -203,7 +203,7 @@ public:
   bool setSpeedTimeAndControl(Motor which_motors, int8_t speed,
                               uint32_t duration, uint8_t control);
 
-  /** 
+  /**
   This function sets the speed, the number of seconds, and
   the control
       "sY<uint8_t><LSB int32_t><uint8_t><LSB uint32_t><uint8_t>"
@@ -216,7 +216,7 @@ public:
   bool setEncoderSpeedTimeAndControl(Motor which_motors,
                                      int32_t encoder, int8_t speed,
                                      uint32_t duration, uint8_t control);
-  
+
   /**
   Validate if the motor has finished running for the set time duration
       "iT<uint8_t>"
@@ -225,7 +225,7 @@ public:
     If the return value is non-zero, either motor has not finished yet or has encountered an error condition.
   */
   uint8_t isTimeDone(Motor which_motors);
-  
+
   /**
   Wait until the motor has finished running for its set respective time duration
       "wT<uint8_t>"
@@ -234,7 +234,7 @@ public:
     If the return value is non-zero, you should check for error condition such as stall.
   */
   uint8_t waitUntilTimeDone(Motor which_motors);
-  
+
   /**
   Validate if the motor has reached its set target tachometer position
       "iP<uint8_t>"
@@ -243,8 +243,8 @@ public:
     If the return value is non-zero, either motor has not finished yet or has encountered an error condition.
   */
   uint8_t isTachoDone(Motor which_motors);
-  
-  /** 
+
+  /**
   Wait until the motor has reached its set target tachometer position
       "wP<uint8_t>"
     @param which_motors    Provide which motor(s) to operate on
@@ -252,7 +252,7 @@ public:
     If the return value is non-zero, you should check for error condition such as stall.
   */
   uint8_t waitUntilTachoDone(Motor which_motors);
-  
+
   /**
   Run the motor endlessly at the desired speed in the desired direction
       "rU<uint8_t><uint8_t><int8_t>"
@@ -263,7 +263,7 @@ public:
   */
   void runUnlimited(Motor which_motors, Direction direction,
                     int8_t speed);
-                                      
+
   /** Run the motor for a set duration at a set speed and do the next action
       "rM<uint8_t><uint8_t><int8_t><LSB uint32_t><uint8_t><uint8_t>"
    @param which_motors     specify the motor(s) to operate on
@@ -279,7 +279,7 @@ public:
                           int8_t speed, uint32_t duration,
                           Completion_Wait wait_for_completion,
                           Next_Action next_action);
-                                      
+
   /**
   run until the tachometer target has been reached and do next action
       "rP<uint8_t><uint8_t><int8_t><LSB int32_t><uint8_t><uint8_t><uint8_t>"
@@ -298,7 +298,7 @@ public:
                         Move relative,
                         Completion_Wait wait_for_completion,
                         Next_Action next_action);
-                                      
+
   /**
   Run the motor for a set number of degrees and proceed to the next action
       "rD<uint8_t><uint8_t><int8_t><LSB int32_t><uint8_t><uint8_t>"
@@ -315,7 +315,7 @@ public:
                      int8_t speed, int32_t degrees,
                      Completion_Wait wait_for_completion,
                      Next_Action next_action);
-                                      
+
  /**
   Run the motor for a set number of complete rotations and proceed to the next action
       "rR<uint8_t><uint8_t><int8_t><LSB int32_t><uint8_t><uint8_t>"
@@ -332,7 +332,7 @@ public:
                        int8_t speed, int32_t rotations,
                        Completion_Wait wait_for_completion,
                        Next_Action next_action);
-                                      
+
   /**
   stop the motor and do the next action
       "sp<uint8_t><uint8_t>"
@@ -351,7 +351,7 @@ private:
   uint8_t motorStatus[2];
   int32_t targetEncoder[2];
   int32_t lastEncoder[2];
-  
+
   bool motorEnable(Motor which_motor);
   void motorFloat(Motor which_motor);
   void motorBrake(Motor which_motor);

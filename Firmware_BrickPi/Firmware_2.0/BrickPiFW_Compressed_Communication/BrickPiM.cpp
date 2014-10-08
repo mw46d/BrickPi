@@ -24,7 +24,7 @@ static int Enc_States[] = {   0,  -1,   1,   0,   1,   0,   0,  -1,  -1,   0,   
 
 void M_T_ISR(uint8_t port) {
   State[port] = (((State[port] << 2) | (((PIND >> (1 + port)) & 0x02) | ((PIND >> (4 + port)) & 0x01))) & 0x0F);
-  
+
   motorEncoder[port] += Enc_States[State[port]];
 }
 
@@ -34,16 +34,16 @@ ISR(PCINT2_vect) {
 
   // get the pin states for the port.
   curr = PIND;
-  
-  // mask is pins that have changed. 
+
+  // mask is pins that have changed.
   mask = curr ^ PCintLast;
-  
+
   // Update PCintLast for next time
   PCintLast = curr;
-  
+
   // screen out non pcint pins.
   mask &= 0x3C;
-  
+
   if (mask & 0x14){ // PCINT 18 or 20, MAT
     M_T_ISR(PORT_A);
   }
@@ -60,10 +60,10 @@ MotorBank::MotorBank() {
   // Enable the PCINT channels for reading the encoders.
   PCMSK2 |= 0x3C;                 // React to PCINT 18, 19, 20, and 21.
   PCICR |= 0x04;                  // Enable PCINT Enable 2
-  
-  // Setup EN, PWM and DIR as LOW. Setup the EN, PWM, and DIR pins as outputs. 
+
+  // Setup EN, PWM and DIR as LOW. Setup the EN, PWM, and DIR pins as outputs.
   PORTB = PORTB & 0xC0;  // Leave PB6 and 7 alone. 0, 1, 2, 3, 4, and 5 LOW.
-  DDRB  |= 0x3F;                  // Set PB0 - 5 as output  
+  DDRB  |= 0x3F;                  // Set PB0 - 5 as output
 
   reset();
 }
@@ -334,7 +334,7 @@ static void sendStatus(uint8_t *array, bool ret) {
   else {
     array[0] = MSG_TYPE_MOTOR_NOK;
   }
-  
+
   UART_WriteArray(1, array);
 }
 
@@ -420,7 +420,7 @@ uint8_t MotorBank::isTimeDone(Motor which_motors) {
     s = motorStatus[which_motors - 1];
   }
 
-  if ((s & MOTOR_STATUS_TIME) == 0) {
+  if (!(s & MOTOR_STATUS_TIME)) {
     if (s & MOTOR_STATUS_STALL) {
       return MOTOR_STATUS_STALL;
     }
@@ -436,14 +436,14 @@ uint8_t MotorBank::waitUntilTimeDone(Motor which_motors) {
   uint8_t s;
 
   delay(50);
-  s = isTachoDone(which_motors);
+  s = isTimeDone(which_motors);
   while (s & MOTOR_STATUS_TIME) {
     if (s & MOTOR_STATUS_STALL) {
       return MOTOR_STATUS_STALL;
     }
 
     delay(50);
-    s = isTachoDone(which_motors);
+    s = isTimeDone(which_motors);
   }
 
   return 0;
@@ -462,7 +462,7 @@ uint8_t MotorBank::isTachoDone(Motor which_motors) {
     s = motorStatus[which_motors - 1];
   }
 
-  if ((s & MOTOR_STATUS_TACHO) == 0) {
+  if (!(s & MOTOR_STATUS_TACHO)) {
     if (s & MOTOR_STATUS_STALL) {
       return MOTOR_STATUS_STALL;
     }
