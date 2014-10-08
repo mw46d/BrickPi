@@ -225,6 +225,7 @@ bool MotorBank::startBothInSync() {
 bool MotorBank::resetEncoder(Motor which_motor) {
   if (which_motor < Motor_Both) {
     motorEncoder[which_motor - 1] = 0;
+    lastEncoder[which_motor - 1] = 0;
     return true;
   }
 
@@ -572,6 +573,14 @@ bool MotorBank::stop(Motor which_motors, Next_Action next_action) {
   }
   else {
     motorFloat(which_motors);
+  }
+
+  if (which_motors == Motor_Both) {
+    motorStatus[0] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+    motorStatus[1] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+  }
+  else {
+    motorStatus[which_motors - 1] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
   }
 
   return true;
