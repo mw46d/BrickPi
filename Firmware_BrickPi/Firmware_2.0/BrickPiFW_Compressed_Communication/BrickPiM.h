@@ -99,9 +99,6 @@ typedef enum {
   Completion_Wait_For     = 0x01  /*!< Wait for motor to finish, program will wait until current function finishes it's operation */
 } Completion_Wait;
 
-/**
-  @brief This class defines methods for the NXShield Bank(s).
-  */
 class MotorBank {
 public:
   MotorBank();
@@ -351,6 +348,7 @@ private:
   uint8_t motorStatus[2];
   int32_t targetEncoder[2];
   int32_t lastEncoder[2];
+  uint32_t lastEncoderTime[2];
 
   bool motorEnable(Motor which_motor);
   void motorFloat(Motor which_motor);

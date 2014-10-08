@@ -70,7 +70,7 @@ MotorBank::MotorBank() {
 
 bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
   if ((which_motor & Motor_Both) == Motor_Both) {
-    targetEncoder[0] = targetEncoder[1] = target;
+    targetEncoder[0] = targetEncoder[1] = target * 2;
     motorStatus[0] |= MOTOR_STATUS_TACHO;
     motorStatus[1] |= MOTOR_STATUS_TACHO;
   }
@@ -79,7 +79,7 @@ bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
       return false;
     }
 
-    targetEncoder[which_motor - 1] = target;
+    targetEncoder[which_motor - 1] = target * 2;
     motorStatus[which_motor - 1] |= MOTOR_STATUS_TACHO;
   }
 
@@ -89,7 +89,7 @@ bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
 int32_t MotorBank::getEncoderTarget(Motor which_motor) {
   if (which_motor < Motor_Both) {
     if (motorStatus[which_motor - 1] & MOTOR_STATUS_TACHO) {
-      return targetEncoder[which_motor - 1];
+      return targetEncoder[which_motor - 1] / 2;
     }
   }
 
@@ -188,7 +188,7 @@ uint32_t MotorBank::getTimeToRun(Motor which_motor) {
 
 int32_t MotorBank::getEncoderPosition(Motor which_motor) {
   if (which_motor < Motor_Both) {
-    return motorEncoder[which_motor - 1];
+    return motorEncoder[which_motor - 1] / 2;
   }
 
   return 0;
@@ -198,6 +198,8 @@ uint8_t MotorBank::getStatusByte(Motor which_motor) {
   if (which_motor < Motor_Both) {
     return motorStatus[which_motor - 1];
   }
+
+  return 0;
 }
 
 bool MotorBank::reset() {
@@ -210,6 +212,7 @@ bool MotorBank::reset() {
   motorEncoder[0] = motorEncoder[1] = 0;
   targetEncoder[0] = targetEncoder[1] = 0;
   lastEncoder[0] = lastEncoder[1] = 0;
+  lastEncoderTime[0] = lastEncoderTime[1] = -1;
 
   return true;
 }
@@ -218,6 +221,7 @@ bool MotorBank::startBothInSync() {
   PORTB |= 0x30;
   motorStatus[0] |= MOTOR_STATUS_MOVING;
   motorStatus[1] |= MOTOR_STATUS_MOVING;
+  lastEncoderTime[0] = lastEncoderTime[1] = -1;
 
   return true;
 }
@@ -226,6 +230,7 @@ bool MotorBank::resetEncoder(Motor which_motor) {
   if (which_motor < Motor_Both) {
     motorEncoder[which_motor - 1] = 0;
     lastEncoder[which_motor - 1] = 0;
+    lastEncoderTime[which_motor - 1] = -1;
     return true;
   }
 
@@ -288,6 +293,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
     if (control & MOTOR_CONTROL_GO) {
       PORTB |= 0x10;
       motorStatus[0] |= MOTOR_STATUS_MOVING;
+      lastEncoderTime[0] = -1;
     }
     else {
       PORTB &= ~0x10;
@@ -298,6 +304,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
     if (control & MOTOR_CONTROL_GO) {
       PORTB |= 0x20;
       motorStatus[1] |= MOTOR_STATUS_MOVING;
+      lastEncoderTime[1] = -1;
     }
     else {
       PORTB &= ~0x20;
@@ -356,7 +363,7 @@ bool MotorBank::setSpeedTimeAndControl(Motor which_motors, int8_t speed,
   }
 
   if (which_motors == Motor_Both) {
-    control &= ~MOTOR_CONTROL_GO;  // Clear the 'go right now' flag
+    control &= ~MOTOR_CONTROL_GO;			// Clear the 'go right now' flag
     motorFloat(Motor_Both);
     bool m1 = setSpeedTimeAndControl(Motor_1, speed, duration, control);
     bool m2 = setSpeedTimeAndControl(Motor_2, speed, duration, control);
@@ -383,7 +390,7 @@ bool MotorBank::setEncoderSpeedTimeAndControl(Motor which_motors,
   }
 
   if (which_motors == Motor_Both) {
-    control &= ~MOTOR_CONTROL_GO;  // Clear the 'go right now' flag
+    control &= ~MOTOR_CONTROL_GO;			// Clear the 'go right now' flag
     motorFloat(Motor_Both);
     bool m1 = setEncoderSpeedTimeAndControl(Motor_1, encoder, speed, duration, control);
     bool m2 = setEncoderSpeedTimeAndControl(Motor_2, encoder, speed, duration, control);
@@ -523,17 +530,16 @@ uint8_t MotorBank::runTachometer(Motor which_motors, Direction direction,
   uint8_t ctrl = MOTOR_CONTROL_SPEED | MOTOR_CONTROL_TACHO | MOTOR_CONTROL_GO;
   ctrl |= calcNextActionBits(next_action);
 
-  // The tachometer can be absolute or relative.
-  // If it is absolute, we ignore the direction parameter.
+							// The tachometer can be absolute or relative.
+							// If it is absolute, we ignore the direction parameter.
   int32_t final_tach = tachometer;
 
   if (relative == Move_Relative) {
     ctrl |= MOTOR_CONTROL_RELATIVE;
 
-    // a (relative) forward command is always a positive tachometer reading
+							// a (relative) forward command is always a positive tachometer reading
     final_tach = abs(tachometer);
-    if (sp < 0) {
-      // and a (relative) reverse command is always negative
+    if (sp < 0) {					// and a (relative) reverse command is always negative
       final_tach = -final_tach;
     }
   }
@@ -598,22 +604,20 @@ void MotorBank::updateStatus() {
       continue;
     }
 
-    if (status & MOTOR_STATUS_TIME) {
-      if (finishTime[m] <= time) {
-							// Stop with the next action
-        if (ctrl & MOTOR_CONTROL_BRK) {
-          motorBrake((Motor)(m + 1));
-        }
-        else {
-          motorFloat((Motor)(m + 1));
-        }
-
-        motorStatus[m] &= ~MOTOR_STATUS_TIME;
+    if ((status & MOTOR_STATUS_TIME) &&
+        (finishTime[m] <= time)) {			// Stop, time done
+      if (ctrl & MOTOR_CONTROL_BRK) {
+        motorBrake((Motor)(m + 1));
       }
+      else {
+        motorFloat((Motor)(m + 1));
+      }
+
+      motorStatus[m] &= ~MOTOR_STATUS_TIME;
     }
     else if ((status & MOTOR_STATUS_TACHO) &&
-        ((lastEncoder[m] < motorEncoder[m] && motorEncoder[m] >= targetEncoder[m]) || // Stop, positive target reached
-          (lastEncoder[m] > motorEncoder[m] && motorEncoder[m] <= targetEncoder[m]))) { // Stop, negative target reached
+        ((lastEncoder[m] < motorEncoder[m] && motorEncoder[m] >= targetEncoder[m]) ||	// Stop, positive target reached
+          (lastEncoder[m] > motorEncoder[m] && motorEncoder[m] <= targetEncoder[m]))) {	// Stop, negative target reached
       if (ctrl & MOTOR_CONTROL_BRK) {
         motorBrake((Motor)(m + 1));
       }
@@ -622,14 +626,23 @@ void MotorBank::updateStatus() {
       }
       motorStatus[m] &= ~MOTOR_STATUS_TACHO;
     }
-    else if (lastEncoder[m] == motorEncoder[m]) {
+    else {
+      if (lastEncoderTime[m] == -1) {
+        lastEncoderTime[m] = time;
+      }
+      else if (lastEncoderTime[m] + 50 < time) {
+        if (lastEncoder[m] == motorEncoder[m]) {
 							// Stop, stall
-      motorBrake((Motor)(m + 1));
-      motorStatus[m] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
-      motorStatus[m] |= MOTOR_STATUS_STALL;
+          motorBrake((Motor)(m + 1));
+          motorStatus[m] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+          motorStatus[m] |= MOTOR_STATUS_STALL;
+        }
+        else {
+          lastEncoder[m] = motorEncoder[m];
+          lastEncoderTime[m] = time;
+        }
+      }
     }
-
-    lastEncoder[m] = motorEncoder[m];
   }
 }
 
@@ -671,7 +684,7 @@ void MotorBank::parseCommand(uint8_t *array, uint8_t bytes) {
           which_motors = (Motor)array[2];
           uvalue8 = getStatusByte(which_motors);
 
-          array[0] = MSG_TYPE_MOTOR_I8;
+          array[0] = MSG_TYPE_MOTOR_U8;
           array[1] = uvalue8;
 
           UART_WriteArray(2, array);
@@ -789,7 +802,7 @@ void MotorBank::parseCommand(uint8_t *array, uint8_t bytes) {
           UART_WriteArray(2, array);
         }
         break;
-        case 'E': {                                     // resetEncoder()
+        case 'E': {					// resetEncoder()
           if (bytes != 3) {
             sendStatus(array, false);
             return;
