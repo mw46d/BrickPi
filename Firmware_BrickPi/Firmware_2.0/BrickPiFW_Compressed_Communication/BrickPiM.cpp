@@ -254,29 +254,52 @@ void MotorBank::motorFloat(Motor which_motor) {
 }
 
 void MotorBank::motorBrake(Motor which_motor) {
+  uint32_t time = millis();
+
   if (which_motor == Motor_Both) {
-    analogWrite(10, 0);
-    analogWrite(11, 0);
-    PORTB &= ~0x03;
+    if (motorSpeed[0] < 0) {
+      PORTB &= ~0x01;
+    }
+    else {
+      PORTB |= 0x01;
+    }
+
+    if (motorSpeed[1] < 0) {
+      PORTB &= ~0x02;
+    }
+    else {
+      PORTB |= 0x02;
+    }
+
     PORTB |= 0x30;
     motorStatus[0] |= MOTOR_STATUS_BRK;
-    motorStatus[0] &= ~MOTOR_STATUS_MOVING;
+    lastEncoderTime[0] = time;
     motorStatus[1] |= MOTOR_STATUS_BRK;
-    motorStatus[1] &= ~MOTOR_STATUS_MOVING;
+    lastEncoderTime[1] = time;
   }
   else if ((which_motor & Motor_Both) == Motor_1) {
-    analogWrite(10, 0);
-    PORTB &= ~0x01;
+    if (motorSpeed[0] < 0) {
+      PORTB &= ~0x01;
+    }
+    else {
+      PORTB |= 0x01;
+    }
+
     PORTB |= 0x10;
     motorStatus[0] |= MOTOR_STATUS_BRK;
-    motorStatus[0] &= ~MOTOR_STATUS_MOVING;
+    lastEncoderTime[0] = time;
   }
   else if ((which_motor & Motor_Both) == Motor_2) {
-    analogWrite(11, 0);
-    PORTB &= ~0x02;
+    if (motorSpeed[1] < 0) {
+      PORTB &= ~0x02;
+    }
+    else {
+      PORTB |= 0x02;
+    }
+
     PORTB |= 0x20;
     motorStatus[1] |= MOTOR_STATUS_BRK;
-    motorStatus[1] &= ~MOTOR_STATUS_MOVING;
+    lastEncoderTime[1] = time;
   }
 }
 
@@ -604,7 +627,21 @@ void MotorBank::updateStatus() {
       continue;
     }
 
-    if ((status & MOTOR_STATUS_TIME) &&
+    if (status & MOTOR_STATUS_BRK) {
+      if (lastEncoderTime[m] + 50 < time) {
+        if (m == 0) {
+          analogWrite(10, 0);
+          PORTB &= ~0x01;
+        }
+        else {
+          analogWrite(11, 0);
+          PORTB &= ~0x02;
+        }
+
+        motorStatus[m] &= ~MOTOR_STATUS_MOVING;
+      }
+    }
+    else if ((status & MOTOR_STATUS_TIME) &&
         (finishTime[m] <= time)) {			// Stop, time done
       if (ctrl & MOTOR_CONTROL_BRK) {
         motorBrake((Motor)(m + 1));
