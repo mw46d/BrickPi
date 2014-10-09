@@ -70,7 +70,7 @@ MotorBank::MotorBank() {
 
 bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
   if ((which_motor & Motor_Both) == Motor_Both) {
-    targetEncoder[0] = targetEncoder[1] = target * 2;
+    targetEncoder[0] = targetEncoder[1] = target;
     motorStatus[0] |= MOTOR_STATUS_TACHO;
     motorStatus[1] |= MOTOR_STATUS_TACHO;
   }
@@ -79,7 +79,7 @@ bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
       return false;
     }
 
-    targetEncoder[which_motor - 1] = target * 2;
+    targetEncoder[which_motor - 1] = target;
     motorStatus[which_motor - 1] |= MOTOR_STATUS_TACHO;
   }
 
@@ -89,15 +89,50 @@ bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
 int32_t MotorBank::getEncoderTarget(Motor which_motor) {
   if (which_motor < Motor_Both) {
     if (motorStatus[which_motor - 1] & MOTOR_STATUS_TACHO) {
-      return targetEncoder[which_motor - 1] / 2;
+      return targetEncoder[which_motor - 1];
     }
   }
 
   return 0;
 }
 
-bool MotorBank::setSpeed(Motor which_motor, int8_t speed) {
+static void setSpeedInternal(Motor which_motor, int8_t speed) {
   bool reverse = false;
+
+  if (which_motor >= Motor_Both) {
+    return;
+  }
+
+  if (speed < 0) {
+    reverse = true;
+    speed = -speed;
+  }
+
+  uint8_t finalSpeed = (uint8_t)(((uint16_t)speed * 255) / 100);
+
+  if (which_motor == Motor_1) {
+    if (reverse) {
+      analogWrite(10, ~finalSpeed);
+      PORTB |= 0x01;
+    }
+    else {
+      analogWrite(10, finalSpeed);
+      PORTB &= ~0x01;
+    }
+  }
+  else if (which_motor == Motor_2) {
+    if (reverse) {
+      analogWrite(11, ~finalSpeed);
+      PORTB |= 0x02;
+    }
+    else {
+      analogWrite(11, finalSpeed);
+      PORTB &= ~0x02;
+    }
+  }
+}
+
+bool MotorBank::setSpeed(Motor which_motor, int8_t speed) {
 
   if ((which_motor & Motor_Both) == Motor_Both) {
     bool r1 = setSpeed(Motor_1, speed);
@@ -110,40 +145,11 @@ bool MotorBank::setSpeed(Motor which_motor, int8_t speed) {
   }
 
   motorSpeed[which_motor - 1] = speed;
-
-  if (speed < 0) {
-    reverse = true;
-    speed = -speed;
-  }
-
   motorStatus[which_motor - 1] |= MOTOR_STATUS_SPEED;
 
-  speed = (uint8_t)(((uint16_t)speed * 255) / 100);
+  setSpeedInternal(which_motor, speed);
 
-  if (which_motor == Motor_1) {
-    if (reverse) {
-      analogWrite(10, speed);
-      PORTB |= 0x01;
-    }
-    else {
-      analogWrite(10, speed);
-      PORTB &= ~0x01;
-    }
-    return true;
-  }
-  else if (which_motor == Motor_2) {
-    if (reverse) {
-      analogWrite(11, speed);
-      PORTB |= 0x02;
-    }
-    else {
-      analogWrite(11, speed);
-      PORTB &= ~0x02;
-    }
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 int8_t MotorBank::getSpeed(Motor which_motor) {
@@ -188,7 +194,7 @@ uint32_t MotorBank::getTimeToRun(Motor which_motor) {
 
 int32_t MotorBank::getEncoderPosition(Motor which_motor) {
   if (which_motor < Motor_Both) {
-    return motorEncoder[which_motor - 1] / 2;
+    return motorEncoder[which_motor - 1];
   }
 
   return 0;
@@ -218,7 +224,11 @@ bool MotorBank::reset() {
 }
 
 bool MotorBank::startBothInSync() {
+  lastEncoder[0] = motorEncoder[0];
+  lastEncoder[1] = motorEncoder[1];
+
   PORTB |= 0x30;
+
   motorStatus[0] |= MOTOR_STATUS_MOVING;
   motorStatus[1] |= MOTOR_STATUS_MOVING;
   lastEncoderTime[0] = lastEncoderTime[1] = -1;
@@ -254,52 +264,21 @@ void MotorBank::motorFloat(Motor which_motor) {
 }
 
 void MotorBank::motorBrake(Motor which_motor) {
-  uint32_t time = millis();
+  if (which_motor > Motor_Both) {
+    return;
+  }
 
   if (which_motor == Motor_Both) {
-    if (motorSpeed[0] < 0) {
-      PORTB &= ~0x01;
-    }
-    else {
-      PORTB |= 0x01;
-    }
-
-    if (motorSpeed[1] < 0) {
-      PORTB &= ~0x02;
-    }
-    else {
-      PORTB |= 0x02;
-    }
-
-    PORTB |= 0x30;
-    motorStatus[0] |= MOTOR_STATUS_BRK;
-    lastEncoderTime[0] = time;
-    motorStatus[1] |= MOTOR_STATUS_BRK;
-    lastEncoderTime[1] = time;
+    motorBrake(Motor_1);
+    motorBrake(Motor_2);
   }
-  else if ((which_motor & Motor_Both) == Motor_1) {
-    if (motorSpeed[0] < 0) {
-      PORTB &= ~0x01;
-    }
-    else {
-      PORTB |= 0x01;
-    }
+  else {
+    uint32_t time = millis();
 
-    PORTB |= 0x10;
-    motorStatus[0] |= MOTOR_STATUS_BRK;
-    lastEncoderTime[0] = time;
-  }
-  else if ((which_motor & Motor_Both) == Motor_2) {
-    if (motorSpeed[1] < 0) {
-      PORTB &= ~0x02;
-    }
-    else {
-      PORTB |= 0x02;
-    }
+    setSpeedInternal(which_motor, -motorSpeed[which_motor - 1]);
 
-    PORTB |= 0x20;
-    motorStatus[1] |= MOTOR_STATUS_BRK;
-    lastEncoderTime[1] = time;
+    motorStatus[which_motor - 1] |= MOTOR_STATUS_BRK;
+    lastEncoderTime[which_motor - 1] = time;
   }
 }
 
@@ -314,6 +293,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
 
   if (which_motor == Motor_1) {
     if (control & MOTOR_CONTROL_GO) {
+      lastEncoder[0] = motorEncoder[0];
       PORTB |= 0x10;
       motorStatus[0] |= MOTOR_STATUS_MOVING;
       lastEncoderTime[0] = -1;
@@ -325,6 +305,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
   }
   else {
     if (control & MOTOR_CONTROL_GO) {
+      lastEncoder[0] = motorEncoder[0];
       PORTB |= 0x20;
       motorStatus[1] |= MOTOR_STATUS_MOVING;
       lastEncoderTime[1] = -1;
@@ -632,10 +613,12 @@ void MotorBank::updateStatus() {
         if (m == 0) {
           analogWrite(10, 0);
           PORTB &= ~0x01;
+          PORTB |= 0x10;
         }
         else {
           analogWrite(11, 0);
           PORTB &= ~0x02;
+          PORTB |= 0x20;
         }
 
         motorStatus[m] &= ~MOTOR_STATUS_MOVING;
