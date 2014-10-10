@@ -133,15 +133,14 @@ static void setSpeedInternal(Motor which_motor, int8_t speed) {
 }
 
 bool MotorBank::setSpeed(Motor which_motor, int8_t speed) {
+  if (which_motor > Motor_Both) {
+    return false;
+  }
 
-  if ((which_motor & Motor_Both) == Motor_Both) {
+  if (which_motor == Motor_Both) {
     bool r1 = setSpeed(Motor_1, speed);
     bool r2 = setSpeed(Motor_2, speed);
     return  r1 && r2;
-  }
-
-  if (which_motor >= Motor_Both) {
-    return false;
   }
 
   motorSpeed[which_motor - 1] = speed;
@@ -165,16 +164,16 @@ bool MotorBank::setTimeToRun(Motor which_motor, uint32_t mseconds) {
     return true;
   }
 
-  if ((which_motor & Motor_Both) == Motor_Both) {
+  if (which_motor > Motor_Both) {
+    return false;
+  }
+
+  if (which_motor == Motor_Both) {
     finishTime[0] = finishTime[1] = mseconds + millis();
     motorStatus[0] |= MOTOR_STATUS_TIME;
     motorStatus[1] |= MOTOR_STATUS_TIME;
   }
   else {
-    if (which_motor >= Motor_Both) {
-      return false;
-    }
-
     finishTime[which_motor - 1] = mseconds + millis();
     motorStatus[which_motor - 1] |= MOTOR_STATUS_TIME;
   }
@@ -283,13 +282,11 @@ void MotorBank::motorBrake(Motor which_motor) {
 }
 
 bool MotorBank::motorEnable(Motor which_motor) {
-  uint8_t control;
-
   if (which_motor >= Motor_Both) {
     return false;
   }
 
-  control = motorControl[which_motor - 1];
+  uint8_t control = motorControl[which_motor - 1];
 
   if (which_motor == Motor_1) {
     if (control & MOTOR_CONTROL_GO) {
@@ -305,7 +302,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
   }
   else {
     if (control & MOTOR_CONTROL_GO) {
-      lastEncoder[0] = motorEncoder[0];
+      lastEncoder[1] = motorEncoder[1];
       PORTB |= 0x20;
       motorStatus[1] |= MOTOR_STATUS_MOVING;
       lastEncoderTime[1] = -1;
