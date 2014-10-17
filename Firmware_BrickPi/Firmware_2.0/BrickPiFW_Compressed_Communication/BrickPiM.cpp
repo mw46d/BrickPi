@@ -229,7 +229,9 @@ bool MotorBank::startBothInSync() {
   PORTB |= 0x30;
 
   motorStatus[0] |= MOTOR_STATUS_MOVING;
+  motorStatus[0] &= ~MOTOR_STATUS_BRK;
   motorStatus[1] |= MOTOR_STATUS_MOVING;
+  motorStatus[1] &= ~MOTOR_STATUS_BRK;
   lastEncoderTime[0] = lastEncoderTime[1] = -1;
 
   return true;
@@ -278,6 +280,7 @@ void MotorBank::motorBrake(Motor which_motor) {
 
     motorStatus[which_motor - 1] |= MOTOR_STATUS_BRK;
     lastEncoderTime[which_motor - 1] = time;
+    motorSpeed[which_motor - 1] = 0;
   }
 }
 
@@ -293,6 +296,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
       lastEncoder[0] = motorEncoder[0];
       PORTB |= 0x10;
       motorStatus[0] |= MOTOR_STATUS_MOVING;
+      motorStatus[0] &= ~MOTOR_STATUS_BRK;
       lastEncoderTime[0] = -1;
     }
     else {
@@ -305,6 +309,7 @@ bool MotorBank::motorEnable(Motor which_motor) {
       lastEncoder[1] = motorEncoder[1];
       PORTB |= 0x20;
       motorStatus[1] |= MOTOR_STATUS_MOVING;
+      motorStatus[1] &= ~MOTOR_STATUS_BRK;
       lastEncoderTime[1] = -1;
     }
     else {
@@ -575,19 +580,29 @@ bool MotorBank::stop(Motor which_motors, Next_Action next_action) {
     return false;
   }
 
-  if (next_action != Next_Action_Float) {
-    motorBrake(which_motors);
-  }
-  else {
-    motorFloat(which_motors);
-  }
+  if ((which_motors & Motor_Both) == Motor_1) {
+    if (motorStatus[0] & MOTOR_STATUS_MOVING) {
+      if (next_action != Next_Action_Float) {
+        motorBrake(Motor_1);
+      }
+      else {
+        motorFloat(Motor_1);
+      }
 
-  if (which_motors == Motor_Both) {
-    motorStatus[0] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
-    motorStatus[1] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+      motorStatus[0] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+    }
   }
-  else {
-    motorStatus[which_motors - 1] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+  else if ((which_motors & Motor_Both) == Motor_2) {
+    if (motorStatus[1] & MOTOR_STATUS_MOVING) {
+      if (next_action != Next_Action_Float) {
+        motorBrake(Motor_2);
+      }
+      else {
+        motorFloat(Motor_2);
+      }
+
+      motorStatus[1] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
+    }
   }
 
   return true;
@@ -643,7 +658,7 @@ void MotorBank::updateStatus() {
       }
       motorStatus[m] &= ~MOTOR_STATUS_TACHO;
     }
-    else {
+    else if (status & MOTOR_STATUS_MOVING) {
       if (lastEncoderTime[m] == -1) {
         lastEncoderTime[m] = time;
       }
