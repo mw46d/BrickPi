@@ -69,16 +69,16 @@ MotorBank::MotorBank() {
 }
 
 bool MotorBank::setEncoderTarget(Motor which_motor, int32_t target) {
-  if ((which_motor & Motor_Both) == Motor_Both) {
+  if (which_motor > Motor_Both) {
+    return false;
+  }
+
+  if (which_motor == Motor_Both) {
     targetEncoder[0] = targetEncoder[1] = target;
     motorStatus[0] |= MOTOR_STATUS_TACHO;
     motorStatus[1] |= MOTOR_STATUS_TACHO;
   }
   else {
-    if (which_motor >= Motor_Both) {
-      return false;
-    }
-
     targetEncoder[which_motor - 1] = target;
     motorStatus[which_motor - 1] |= MOTOR_STATUS_TACHO;
   }
@@ -254,11 +254,11 @@ void MotorBank::motorFloat(Motor which_motor) {
     motorStatus[0] &= ~MOTOR_STATUS_MOVING & ~MOTOR_STATUS_BRK;
     motorStatus[1] &= ~MOTOR_STATUS_MOVING & ~MOTOR_STATUS_BRK;
   }
-  else if ((which_motor & Motor_Both) == Motor_1) {
+  else if (which_motor & Motor_1) {
     PORTB &= ~0x10;
     motorStatus[0] &= ~MOTOR_STATUS_MOVING & ~MOTOR_STATUS_BRK;
   }
-  else if ((which_motor & Motor_Both) == Motor_2) {
+  else if (which_motor & Motor_2) {
     PORTB &= ~0x20;
     motorStatus[1] &= ~MOTOR_STATUS_MOVING & ~MOTOR_STATUS_BRK;
   }
@@ -580,7 +580,7 @@ bool MotorBank::stop(Motor which_motors, Next_Action next_action) {
     return false;
   }
 
-  if ((which_motors & Motor_Both) == Motor_1) {
+  if (which_motors & Motor_1) {
     if (motorStatus[0] & MOTOR_STATUS_MOVING) {
       if (next_action != Next_Action_Float) {
         motorBrake(Motor_1);
@@ -592,7 +592,7 @@ bool MotorBank::stop(Motor which_motors, Next_Action next_action) {
       motorStatus[0] &= ~MOTOR_STATUS_TACHO & ~MOTOR_STATUS_TIME;
     }
   }
-  else if ((which_motors & Motor_Both) == Motor_2) {
+  if (which_motors & Motor_2) {
     if (motorStatus[1] & MOTOR_STATUS_MOVING) {
       if (next_action != Next_Action_Float) {
         motorBrake(Motor_2);
@@ -658,7 +658,7 @@ void MotorBank::updateStatus() {
       }
       motorStatus[m] &= ~MOTOR_STATUS_TACHO;
     }
-    else if (status & MOTOR_STATUS_MOVING) {
+    else {
       if (lastEncoderTime[m] == -1) {
         lastEncoderTime[m] = time;
       }
